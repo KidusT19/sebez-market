@@ -1,0 +1,189 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              String      @id @default(uuid())
+  name            String
+  email           String?     @unique
+  phone           String      @unique
+  passwordHash    String
+  role            String      @default("BUYER") // BUYER, MERCHANT, DRIVER, ADMIN
+  city            String      @default("Adama")
+  kebele          String?
+  landmark        String?
+  avatarUrl       String?
+  rating          Float       @default(5.0)
+  completedTrades Int         @default(0)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  // Relations
+  driverKyc       DriverKyc?
+  listings        Listing[]
+  sentTradeOffers TradeOffer[]          @relation("SentTrades")
+  receivedOffers  TradeOffer[]          @relation("ReceivedTrades")
+  cycleEntries    TradeCycleParticipant[]
+  buyerDeliveries DeliveryOrder[]       @relation("BuyerDeliveries")
+  merchantDeliveries DeliveryOrder[]    @relation("MerchantDeliveries")
+  drivenPools     DeliveryPool[]        @relation("DriverPools")
+  escrowsAsBuyer  EscrowTransaction[]   @relation("BuyerEscrow")
+  escrowsAsSeller EscrowTransaction[]   @relation("SellerEscrow")
+}
+
+model DriverKyc {
+  id              String      @id @default(uuid())
+  userId          String      @unique
+  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  nationalIdNumber String
+  licenseNumber   String
+  vehicleType     String      @default("BAJAJ") // BAJAJ, TAXI, MOTORCYCLE
+  plateNumber     String
+  idFrontUrl      String?
+  licenseUrl      String?
+  status          String      @default("PENDING") // PENDING, APPROVED, REJECTED
+  rejectionReason String?
+  verifiedAt      DateTime?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+}
+
+model Category {
+  id          String    @id @default(uuid())
+  name        String
+  slug        String    @unique
+  iconName    String?
+  listings    Listing[]
+}
+
+model Listing {
+  id              String        @id @default(uuid())
+  title           String
+  description     String
+  price           Float         // Estimated market value in ETB
+  condition       String        @default("GOOD") // BRAND_NEW, LIKE_NEW, EXCELLENT, GOOD, FAIR
+  allowBarter     Boolean       @default(true)
+  allowCashBuy    Boolean       @default(true)
+  targetWishlist  String?       // Description of items accepted in trade
+  city            String        @default("Adama")
+  kebele          String        // e.g. "Arada", "Bole", "Kebele 04"
+  landmark        String?       // e.g. "Near Posta Bet", "Behind Stadium"
+  imageUrls       String        // JSON stringified array of image URLs
+  status          String        @default("AVAILABLE") // AVAILABLE, IN_TRADE, SOLD, ARCHIVED
+  userId          String
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  categoryId      String
+  category        Category      @relation(fields: [categoryId], references: [id])
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  targetTradeOffers   TradeOffer[]  @relation("TargetListing")
+  offeredTradeOffers  TradeOffer[]  @relation("OfferedListing")
+  cycleOffered        TradeCycleParticipant[] @relation("OfferedInCycle")
+  cycleDesired        TradeCycleParticipant[] @relation("DesiredInCycle")
+  deliveryOrders      DeliveryOrder[]
+}
+
+model TradeOffer {
+  id                String      @id @default(uuid())
+  targetListingId   String
+  targetListing     Listing     @relation("TargetListing", fields: [targetListingId], references: [id])
+  offeredListingId  String
+  offeredListing    Listing     @relation("OfferedListing", fields: [offeredListingId], references: [id])
+  initiatorId       String
+  initiator         User        @relation("SentTrades", fields: [initiatorId], references: [id])
+  receiverId        String
+  receiver          User        @relation("ReceivedTrades", fields: [receiverId], references: [id])
+  cashTopUpAmount   Float       @default(0.0) // Positive: initiator pays top-up. Negative: receiver pays.
+  status            String      @default("PENDING") // PENDING, NEGOTIATING, ACCEPTED, IN_ESCROW, COMPLETED, CANCELLED
+  notes             String?
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  escrowTransaction EscrowTransaction?
+}
+
+model TradeCycle {
+  id              String                  @id @default(uuid())
+  status          String                  @default("DETECTED") // DETECTED, PROPOSED, LOCKED, EXECUTING, COMPLETED, CANCELLED
+  participants    TradeCycleParticipant[]
+  matchedAt       DateTime                @default(now())
+  completedAt     DateTime?
+}
+
+model TradeCycleParticipant {
+  id                String      @id @default(uuid())
+  cycleId           String
+  cycle             TradeCycle  @relation(fields: [cycleId], references: [id], onDelete: Cascade)
+  userId            String
+  user              User        @relation(fields: [userId], references: [id])
+  listingOfferedId  String
+  listingOffered    Listing     @relation("OfferedInCycle", fields: [listingOfferedId], references: [id])
+  listingDesiredId  String
+  listingDesired    Listing     @relation("DesiredInCycle", fields: [listingDesiredId], references: [id])
+  topUpAdjustment   Float       @default(0.0)
+  hasAccepted       Boolean     @default(false)
+}
+
+model DeliveryPool {
+  id                  String          @id @default(uuid())
+  originMarket        String          @default("Arada Market, Adama")
+  destinationKebele   String          // e.g. "Bole Kebele"
+  driverId            String?
+  driver              User?           @relation("DriverPools", fields: [driverId], references: [id])
+  status              String          @default("GATHERING") // GATHERING, SCHEDULED, DISPATCHED, COMPLETED
+  scheduledDeparture  DateTime
+  maxOrders           Int             @default(6)
+  ordersCount         Int             @default(0)
+  baseFare            Float           @default(150.0)
+  discountedFarePerUser Float         @default(45.0)
+  orders              DeliveryOrder[]
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+}
+
+model DeliveryOrder {
+  id                String          @id @default(uuid())
+  poolId            String?
+  pool              DeliveryPool?   @relation(fields: [poolId], references: [id])
+  listingId         String?
+  listing           Listing?        @relation(fields: [listingId], references: [id])
+  buyerId           String
+  buyer             User            @relation("BuyerDeliveries", fields: [buyerId], references: [id])
+  merchantId        String?
+  merchant          User?           @relation("MerchantDeliveries", fields: [merchantId], references: [id])
+  dropoffKebele     String
+  dropoffLandmark   String
+  recipientPhone    String
+  deliveryFee       Float           @default(45.0)
+  status            String          @default("PENDING") // PENDING, ASSIGNED, PICKED_UP, IN_TRANSIT, DELIVERED, CANCELLED
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  escrowTransaction EscrowTransaction?
+}
+
+model EscrowTransaction {
+  id                  String          @id @default(uuid())
+  amount              Float
+  currency            String          @default("ETB")
+  provider            String          @default("TELEBIRR") // TELEBIRR, CBE_BIRR, CHAPA, CASH
+  buyerId             String
+  buyer               User            @relation("BuyerEscrow", fields: [buyerId], references: [id])
+  sellerId            String?
+  seller              User?           @relation("SellerEscrow", fields: [sellerId], references: [id])
+  merchantReleaseOtp  String?         // 6-digit code presented to merchant
+  customerDeliveryOtp String?         // 6-digit code presented upon door delivery
+  status              String          @default("HELD") // HELD, RELEASED, REFUNDED, DISPUTED
+  tradeOfferId        String?         @unique
+  tradeOffer          TradeOffer?     @relation(fields: [tradeOfferId], references: [id])
+  deliveryOrderId     String?         @unique
+  deliveryOrder       DeliveryOrder?  @relation(fields: [deliveryOrderId], references: [id])
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+}

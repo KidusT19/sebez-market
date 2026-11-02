@@ -67,7 +67,7 @@ In traditional marketplaces (like Jiji or Facebook Marketplace), a user wanting 
 ## 10-Day Development Sprint Roadmap
 
 - [x] **Day 0:** Project charter, system architecture, and core specifications.
-- [ ] **Day 1:** Core Next.js scaffolding, Tailwind theme, and Prisma schema.
+- [x] **Day 1:** Core Next.js scaffolding, Tailwind theme, and Prisma schema.
 - [ ] **Day 2:** Role-based authentication & Driver KYC onboarding.
 - [ ] **Day 3:** Marketplace classifieds & barter catalog with kebele tagging.
 - [ ] **Day 4:** Bilateral (2-way) swap negotiation room & dynamic top-up calculator.
